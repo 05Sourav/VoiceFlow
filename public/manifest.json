@@ -1,0 +1,14 @@
+{
+    "name": "Voice-PWA",
+    "short_name": "VoicePWA",
+    "description": "Offline-capable voice assistant with local STT and TTS",
+    "display": "standalone",
+    "start_url": "/",
+    "background_color": "#000",
+    "theme_color": "#000",
+    "scope": "/",
+    "icons": [
+      { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+      { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    ]
+  }
