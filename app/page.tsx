@@ -1,6 +1,7 @@
 'use client';
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import useMic from '@/hooks/useMic';
+import dynamic from 'next/dynamic';
 
 // Type declarations for Web Speech API
 declare global {
@@ -11,17 +12,8 @@ declare global {
   }
 }
 
-// Browser compatibility check - moved outside component to prevent recreation
+// Browser compatibility check - only run on client
 const getBrowserSupport = () => {
-  if (typeof window === 'undefined') {
-    return {
-      webSpeechAPI: false,
-      speechSynthesis: false,
-      getUserMedia: false,
-      audioContext: false,
-    };
-  }
-  
   return {
     webSpeechAPI: !!(window.webkitSpeechRecognition || window.SpeechRecognition),
     speechSynthesis: !!window.speechSynthesis,
@@ -30,7 +22,7 @@ const getBrowserSupport = () => {
   };
 };
 
-export default function Home() {
+function HomeComponent() {
   const { start, stop, isRecording } = useMic();
   const whisperWorker = useRef<Worker | null>(null);
   const audioCtx = useRef<AudioContext | null>(null);
@@ -68,14 +60,19 @@ export default function Home() {
   // Check browser support after hydration
   useEffect(() => {
     setIsHydrated(true);
-    const support = getBrowserSupport();
-    setBrowserSupport(support);
-    console.log('Browser support:', support);
-    pushLog(`Browser support: Web Speech API: ${support.webSpeechAPI}, Speech Synthesis: ${support.speechSynthesis}, Media: ${support.getUserMedia}`);
+    // Only check browser support on client side
+    if (typeof window !== 'undefined') {
+      const support = getBrowserSupport();
+      setBrowserSupport(support);
+      console.log('Browser support:', support);
+      pushLog(`Browser support: Web Speech API: ${support.webSpeechAPI}, Speech Synthesis: ${support.speechSynthesis}, Media: ${support.getUserMedia}`);
+    }
   }, [pushLog]);
 
   // PWA Installation logic
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -114,7 +111,7 @@ export default function Home() {
 
   // Initialize Web Speech API in main thread
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || typeof window === 'undefined') return;
     
     audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
     
@@ -629,9 +626,19 @@ async function llm(prompt: string): Promise<string> {
       return "I'm sorry, but I received an unexpected response from the API.";
     }
 
-    return json.choices[0].message.content;
-  } catch (error) {
-    console.error('LLM Error:', error);
-    return "I'm sorry, but there was an error processing your request.";
-  }
-}
+         return json.choices[0].message.content;
+   } catch (error) {
+     console.error('LLM Error:', error);
+     return "I'm sorry, but there was an error processing your request.";
+   }
+ }
+
+// Export with dynamic import to disable SSR
+export default dynamic(() => Promise.resolve(HomeComponent), {
+  ssr: false,
+  loading: () => (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-white text-xl">Loading Voice Assistant...</div>
+    </div>
+  ),
+});
