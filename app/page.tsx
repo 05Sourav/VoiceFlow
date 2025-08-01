@@ -34,6 +34,7 @@ export default function Home() {
   const { start, stop, isRecording } = useMic();
   const whisperWorker = useRef<Worker | null>(null);
   const audioCtx = useRef<AudioContext | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const [log, setLog] = useState<string[]>([]);
   const [isReady, setIsReady] = useState(false);
@@ -47,16 +48,15 @@ export default function Home() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [recordingCountdown, setRecordingCountdown] = useState(0);
   const [textInput, setTextInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
 
   const pushLog = useCallback((msg: string) => {
     setLog((l) => [...l.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`]);
   }, []);
 
   const checkReady = useCallback(() => {
-    if (whisperWorker.current) {
-      setIsReady(true);
-      pushLog('All systems ready');
-    }
+    setIsReady(true);
+    pushLog('All systems ready');
   }, [pushLog]);
 
   // Check browser support after hydration
@@ -68,82 +68,89 @@ export default function Home() {
     pushLog(`Browser support: Web Speech API: ${support.webSpeechAPI}, Speech Synthesis: ${support.speechSynthesis}, Media: ${support.getUserMedia}`);
   }, [pushLog]);
 
-  // Separate useEffect for initialization
+  // Initialize Web Speech API in main thread
   useEffect(() => {
-    if (!isHydrated) return; // Wait for hydration to complete
+    if (!isHydrated) return;
     
     audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
     
-    // Initialize Whisper worker
-    whisperWorker.current = new Worker(new URL('../workers/whisper.worker', import.meta.url), { type: 'module' });
-
-    whisperWorker.current.postMessage({
-      type: 'init',
-    });
-
-    whisperWorker.current.onmessage = async (e) => {
-      console.log('Whisper worker message:', e.data);
-      
-      if (e.data.type === 'ready') {
-        if (e.data.fallback) {
-          setIsFallbackMode(true);
-          pushLog('Web Speech API not supported - using fallback mode');
-        } else {
-          setIsFallbackMode(false);
-          pushLog('Web Speech API ready');
-        }
+    // Initialize Web Speech API in main thread (more reliable than in worker)
+    if (browserSupport.webSpeechAPI) {
+      try {
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
+        recognitionRef.current = new SpeechRecognition();
+        
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
+        
+        recognitionRef.current.onresult = async (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          console.log('Speech recognition result:', transcript);
+          setIsListening(false);
+          pushLog(`STT result: "${transcript}"`);
+          
+          // Process with LLM
+          const t0 = Date.now();
+          const reply = await llm(transcript);
+          console.log('LLM reply:', reply);
+          pushLog(`LLM RTT ${Date.now() - t0} ms`);
+          
+          // Use Web Speech API for TTS
+          if (browserSupport.speechSynthesis) {
+            const utterance = new SpeechSynthesisUtterance(reply);
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            
+            utterance.onstart = () => {
+              pushLog('TTS started');
+            };
+            
+            utterance.onend = () => {
+              pushLog('TTS completed');
+            };
+            
+            utterance.onerror = (event) => {
+              console.error('TTS error:', event);
+              pushLog('TTS error occurred');
+            };
+            
+            speechSynthesis.speak(utterance);
+          } else {
+            pushLog('Speech synthesis not supported - displaying text only');
+            alert(`Assistant: ${reply}`);
+          }
+        };
+        
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          setIsListening(false);
+          pushLog(`Speech recognition error: ${event.error}`);
+        };
+        
+        recognitionRef.current.onend = () => {
+          console.log('Speech recognition ended');
+          setIsListening(false);
+        };
+        
+        setIsFallbackMode(false);
+        pushLog('Web Speech API initialized in main thread');
         checkReady();
-      } else if (e.data.type === 'result') {
-        console.log('Whisper result received:', e.data.text);
-        pushLog(`STT done in ${e.data.sttMs.toFixed(0)} ms`);
-        const t0 = Date.now();
-        const reply = await llm(e.data.text);
-        console.log('LLM reply:', reply);
-        pushLog(`LLM RTT ${Date.now() - t0} ms`);
-        
-        // Use Web Speech API for real TTS (in main thread)
-        if (browserSupport.speechSynthesis) {
-          const utterance = new SpeechSynthesisUtterance(reply);
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          utterance.volume = 1.0;
-          
-          utterance.onstart = () => {
-            pushLog('TTS started');
-          };
-          
-          utterance.onend = () => {
-            pushLog('TTS completed');
-          };
-          
-          utterance.onerror = (event) => {
-            console.error('TTS error:', event);
-            pushLog('TTS error occurred');
-          };
-          
-          speechSynthesis.speak(utterance);
-        } else {
-          pushLog('Speech synthesis not supported - displaying text only');
-          // You could show the reply in a text area or alert
-          alert(`Assistant: ${reply}`);
-        }
-      } else if (e.data.type === 'error') {
-        console.error('Whisper worker error:', e.data.error);
-        pushLog(`Whisper error: ${e.data.error}`);
-      } else if (e.data.type === 'request_audio') {
-        // Worker is requesting audio data (fallback mode)
-        console.log('Worker requesting audio data');
-        pushLog('Starting audio recording (fallback mode)');
-        
-        // Handle audio recording in a separate function to avoid dependency issues
-        handleAudioRecording();
-      } else {
-        console.log('Unknown worker message type:', e.data.type);
+      } catch (error) {
+        console.error('Failed to initialize Web Speech API:', error);
+        setIsFallbackMode(true);
+        pushLog('Web Speech API failed - using fallback mode');
+        checkReady();
       }
-    };
-  }, [pushLog, checkReady, browserSupport, isHydrated]); // Added isHydrated dependency
+    } else {
+      setIsFallbackMode(true);
+      pushLog('Web Speech API not supported - using fallback mode');
+      checkReady();
+    }
+  }, [pushLog, checkReady, browserSupport, isHydrated]);
 
-  // Separate function to handle audio recording
+  // Fallback audio recording function
   const handleAudioRecording = useCallback(async () => {
     try {
       console.log('Starting audio recording...');
@@ -172,11 +179,26 @@ export default function Home() {
           pushLog('Audio recording stopped');
           console.log('Audio data received, length:', audioData.length);
           
-          // Send audio data to worker
-          whisperWorker.current!.postMessage({
-            type: 'audio_data',
-            data: audioData
-          });
+          // For fallback mode, we'll simulate transcription
+          // In a real app, you'd send this to a STT service
+          setTimeout(() => {
+            const simulatedTranscript = "Hello, how can I help you today?";
+            pushLog(`Simulated STT result: "${simulatedTranscript}"`);
+            
+            // Process with LLM
+            llm(simulatedTranscript).then(reply => {
+              pushLog(`LLM reply: ${reply}`);
+              if (browserSupport.speechSynthesis) {
+                const utterance = new SpeechSynthesisUtterance(reply);
+                utterance.rate = 1.0;
+                utterance.pitch = 1.0;
+                utterance.volume = 1.0;
+                speechSynthesis.speak(utterance);
+              } else {
+                alert(`Assistant: ${reply}`);
+              }
+            });
+          }, 1000);
         } catch (stopError) {
           console.error('Failed to stop audio recording:', stopError);
           pushLog('Failed to stop audio recording');
@@ -186,7 +208,7 @@ export default function Home() {
       console.error('Failed to start audio recording:', error);
       pushLog('Failed to start audio recording');
     }
-  }, [start, stop, pushLog]);
+  }, [start, stop, pushLog, browserSupport]);
 
   const handleTalk = async () => {
     console.log('handleTalk called, isReady:', isReady);
@@ -196,12 +218,40 @@ export default function Home() {
       return;
     }
     
+    if (isListening) {
+      pushLog('Already listening');
+      return;
+    }
+    
     console.log('Starting speech recognition...');
     pushLog('Starting speech recognition...');
     
-    // Trigger Web Speech API directly (no need for separate recording)
-    whisperWorker.current!.postMessage({ type: 'transcribe' });
+    if (browserSupport.webSpeechAPI && recognitionRef.current && !isFallbackMode) {
+      try {
+        setIsListening(true);
+        recognitionRef.current.start();
+        pushLog('Web Speech API started');
+      } catch (error) {
+        console.error('Failed to start Web Speech API:', error);
+        pushLog('Web Speech API failed - using fallback');
+        handleAudioRecording();
+      }
+    } else {
+      // Use fallback audio recording
+      handleAudioRecording();
+    }
   };
+
+  const handleStop = useCallback(() => {
+    if (isListening && recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+        pushLog('Stopped speech recognition');
+      } catch (error) {
+        console.error('Error stopping recognition:', error);
+      }
+    }
+  }, [isListening, pushLog]);
 
   const handleTextSubmit = useCallback(async () => {
     if (!textInput.trim()) {
@@ -239,12 +289,6 @@ export default function Home() {
       alert(`Assistant: ${reply}`);
     }
   }, [textInput, browserSupport, pushLog]);
-
-  const handleStop = useCallback(() => {
-    // This function is not directly used in the new JSX, but keeping it for potential future use or if handleTalk is updated.
-    // For now, it's a placeholder.
-    console.log('handleStop called');
-  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
@@ -286,14 +330,14 @@ export default function Home() {
             onTouchEnd={handleStop}
             disabled={!isReady}
             className={`w-24 h-24 rounded-full text-white font-semibold text-lg transition-all duration-200 transform hover:scale-105 ${
-              isRecording 
+              isListening || isRecording
                 ? 'bg-red-500 text-white animate-pulse' 
                 : isReady 
                   ? 'bg-blue-500 hover:bg-blue-600' 
                   : 'bg-gray-400 cursor-not-allowed'
             }`}
           >
-            {isRecording ? recordingCountdown > 0 ? `${recordingCountdown}s` : 'Processing...' : isReady ? 'Hold to talk' : 'Loading...'}
+            {isListening || isRecording ? recordingCountdown > 0 ? `${recordingCountdown}s` : 'Listening...' : isReady ? 'Hold to talk' : 'Loading...'}
           </button>
         </div>
 
@@ -346,7 +390,7 @@ async function llm(prompt: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemma-3n-e2b-it:free',
+        model: 'deepseek/deepseek-chat-v3-0324:free',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: 150,
       }),
