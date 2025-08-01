@@ -47,8 +47,10 @@ export default function Home() {
   });
   const [isHydrated, setIsHydrated] = useState(false);
   const [recordingCountdown, setRecordingCountdown] = useState(0);
-  const [textInput, setTextInput] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isReplying, setIsReplying] = useState(false);
+  const [currentTranscript, setCurrentTranscript] = useState('');
 
   const pushLog = useCallback((msg: string) => {
     setLog((l) => [...l.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`]);
@@ -88,6 +90,8 @@ export default function Home() {
           const transcript = event.results[0][0].transcript;
           console.log('Speech recognition result:', transcript);
           setIsListening(false);
+          setCurrentTranscript(transcript);
+          setIsProcessing(true);
           pushLog(`STT result: "${transcript}"`);
           
           // Process with LLM
@@ -105,27 +109,39 @@ export default function Home() {
             
             utterance.onstart = () => {
               pushLog('TTS started');
+              setIsProcessing(false); // Stop processing when TTS starts
+              setIsReplying(true); // Start replying state
+              setCurrentTranscript(''); // Clear transcript when TTS starts
             };
             
             utterance.onend = () => {
               pushLog('TTS completed');
+              setIsReplying(false); // Stop replying when TTS ends
             };
             
             utterance.onerror = (event) => {
               console.error('TTS error:', event);
               pushLog('TTS error occurred');
+              setIsProcessing(false);
+              setIsReplying(false);
+              setCurrentTranscript('');
             };
             
             speechSynthesis.speak(utterance);
           } else {
             pushLog('Speech synthesis not supported - displaying text only');
             alert(`Assistant: ${reply}`);
+            setIsProcessing(false);
+            setCurrentTranscript('');
           }
         };
         
         recognitionRef.current.onerror = (event: any) => {
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
+          setIsProcessing(false);
+          setIsReplying(false);
+          setCurrentTranscript('');
           pushLog(`Speech recognition error: ${event.error}`);
         };
         
@@ -183,6 +199,8 @@ export default function Home() {
           // In a real app, you'd send this to a STT service
           setTimeout(() => {
             const simulatedTranscript = "Hello, how can I help you today?";
+            setCurrentTranscript(simulatedTranscript);
+            setIsProcessing(true);
             pushLog(`Simulated STT result: "${simulatedTranscript}"`);
             
             // Process with LLM
@@ -193,20 +211,36 @@ export default function Home() {
                 utterance.rate = 1.0;
                 utterance.pitch = 1.0;
                 utterance.volume = 1.0;
+                utterance.onstart = () => {
+                  setIsProcessing(false); // Stop processing when TTS starts
+                  setIsReplying(true); // Start replying state
+                  setCurrentTranscript(''); // Clear transcript when TTS starts
+                };
+                utterance.onend = () => {
+                  setIsReplying(false); // Stop replying when TTS ends
+                };
                 speechSynthesis.speak(utterance);
               } else {
                 alert(`Assistant: ${reply}`);
+                setIsProcessing(false);
+                setCurrentTranscript('');
               }
             });
           }, 1000);
         } catch (stopError) {
           console.error('Failed to stop audio recording:', stopError);
           pushLog('Failed to stop audio recording');
+          setIsProcessing(false);
+          setIsReplying(false);
+          setCurrentTranscript('');
         }
       }, recordingDuration * 1000);
     } catch (error) {
       console.error('Failed to start audio recording:', error);
       pushLog('Failed to start audio recording');
+      setIsProcessing(false);
+      setIsReplying(false);
+      setCurrentTranscript('');
     }
   }, [start, stop, pushLog, browserSupport]);
 
@@ -218,8 +252,8 @@ export default function Home() {
       return;
     }
     
-    if (isListening) {
-      pushLog('Already listening');
+    if (isListening || isProcessing || isReplying) {
+      pushLog('Already listening, processing, or replying');
       return;
     }
     
@@ -253,114 +287,227 @@ export default function Home() {
     }
   }, [isListening, pushLog]);
 
-  const handleTextSubmit = useCallback(async () => {
-    if (!textInput.trim()) {
-      pushLog('Please enter a question to send.');
-      return;
-    }
-
-    pushLog(`Sending text: "${textInput}"`);
-    const t0 = Date.now();
-    const reply = await llm(textInput);
-    pushLog(`LLM RTT ${Date.now() - t0} ms`);
-
-    if (browserSupport.speechSynthesis) {
-      const utterance = new SpeechSynthesisUtterance(reply);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.volume = 1.0;
-
-      utterance.onstart = () => {
-        pushLog('TTS started');
-      };
-
-      utterance.onend = () => {
-        pushLog('TTS completed');
-      };
-
-      utterance.onerror = (event) => {
-        console.error('TTS error:', event);
-        pushLog('TTS error occurred');
-      };
-
-      speechSynthesis.speak(utterance);
-    } else {
-      pushLog('Speech synthesis not supported - displaying text only');
-      alert(`Assistant: ${reply}`);
-    }
-  }, [textInput, browserSupport, pushLog]);
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Voice Assistant</h1>
-          <p className="text-gray-600">Speak or type your question</p>
-        </div>
-
-        {/* Text Input Fallback */}
-        <div className="mb-6">
-          <input
-            type="text"
-            placeholder="Type your question here..."
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && textInput.trim()) {
-                handleTextSubmit();
-              }
-            }}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <button
-            onClick={handleTextSubmit}
-            disabled={!textInput.trim()}
-            className="mt-2 w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Send Text
-          </button>
-        </div>
-
-        {/* Voice Button */}
-        <div className="text-center">
-          <button
-            onMouseDown={handleTalk}
-            onMouseUp={handleStop}
-            onTouchStart={handleTalk}
-            onTouchEnd={handleStop}
-            disabled={!isReady}
-            className={`w-24 h-24 rounded-full text-white font-semibold text-lg transition-all duration-200 transform hover:scale-105 ${
-              isListening || isRecording
-                ? 'bg-red-500 text-white animate-pulse' 
-                : isReady 
-                  ? 'bg-blue-500 hover:bg-blue-600' 
-                  : 'bg-gray-400 cursor-not-allowed'
-            }`}
-          >
-            {isListening || isRecording ? recordingCountdown > 0 ? `${recordingCountdown}s` : 'Listening...' : isReady ? 'Hold to talk' : 'Loading...'}
-          </button>
-        </div>
-
-        {/* Debug info - only show after hydration */}
-        {isHydrated && (
-          <details className="text-xs text-gray-500 mt-2">
-            <summary>Browser Support Debug</summary>
-            <div className="text-left mt-1">
-              <div>Web Speech API: {browserSupport.webSpeechAPI ? '✅' : '❌'}</div>
-              <div>Speech Synthesis: {browserSupport.speechSynthesis ? '✅' : '❌'}</div>
-              <div>Media Devices: {browserSupport.getUserMedia ? '✅' : '❌'}</div>
-              <div>Audio Context: {browserSupport.audioContext ? '✅' : '❌'}</div>
+    <div className="min-h-screen bg-black" style={{ fontFamily: '"Spline Sans", sans-serif' }}>
+      <div className="mx-auto h-screen max-w-sm overflow-hidden rounded-[40px] bg-gradient-to-br from-[#1b1a2e] via-[#120f26] to-[#0d091e] shadow-2xl">
+        <div className="relative flex size-full flex-col justify-between">
+          
+          {/* Header */}
+          <div className="flex items-center justify-between p-4">
+            <div className="text-white/80">
+              <svg className="feather feather-chevron-left" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
             </div>
-          </details>
-        )}
+            <div className="text-white/80">
+              <svg className="feather feather-settings" fill="none" height="24" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+            
+            {/* Waveform Animation */}
+            <div className="relative flex h-40 w-full items-center justify-center">
+              <div className="absolute inset-0 z-0 h-full w-full bg-gradient-to-tr from-[rgba(101,101,204,0.3)] to-[rgba(191,122,255,0.3)] opacity-50 blur-2xl"></div>
+              
+              {(isListening || isRecording) ? (
+                <div className="flex h-24 items-center justify-center space-x-2">
+                  {[...Array(12)].map((_, i) => (
+                    <div
+                      key={i}
+                      className="waveform-bar h-6 w-2 rounded-full bg-gradient-to-b from-[#6565cc] to-[#bf7aff]"
+                      style={{
+                        animation: `waveform 1.5s ease-in-out infinite`,
+                        animationDelay: `${i * 0.1}s`
+                      }}
+                    ></div>
+                  ))}
+                </div>
+              ) : isProcessing ? (
+                <div className="flex h-24 items-center justify-center">
+                  {/* Processing Animation */}
+                  <div className="flex items-center space-x-3">
+                    <div className="flex space-x-1">
+                      {[...Array(3)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="h-3 w-3 rounded-full bg-[#00d4ff] animate-bounce"
+                          style={{
+                            animationDelay: `${i * 0.2}s`
+                          }}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : isReplying ? (
+                <div className="flex h-24 items-center justify-center">
+                  {/* Replying Animation */}
+                  <div className="flex items-center space-x-3">
+                    <div className="flex space-x-1">
+                      {[...Array(5)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="h-4 w-1 rounded-full bg-[#00ff88] animate-pulse"
+                          style={{
+                            animationDelay: `${i * 0.1}s`
+                          }}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-24 items-center justify-center">
+                  {/* Circular Background - Made Bigger */}
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-[#1a1a2e] to-[#16213e] shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
+                    {/* White Microphone Icon - Made Bigger */}
+                    <svg className="h-14 w-14 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                      <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                      <line x1="8" y1="23" x2="16" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                    </svg>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Status Text */}
+            <h1 className={`mt-8 text-3xl font-bold text-white ${(isListening || isRecording || isProcessing || isReplying) ? 'animate-pulse' : ''}`}>
+              {!isReady ? 'Loading...' : 
+               isListening || isRecording ? 'Listening...' : 
+               isProcessing ? 'Processing...' :
+               isReplying ? 'Replying...' :
+               'Voice Assistant'}
+            </h1>
+            <p className="mt-2 text-base text-white/60">
+              {!isReady ? 'Initializing...' : 
+               isListening || isRecording ? 'I\'m ready to help.' : 
+               isProcessing ? 'Analyzing your request...' :
+               isReplying ? 'Speaking to you...' :
+               'Tap to start speaking'}
+            </p>
+
+            {/* Show Transcript when Processing */}
+            {isProcessing && currentTranscript && (
+              <div className="mt-4 p-3 bg-white/10 rounded-lg max-w-xs">
+                <p className="text-sm text-white/80">You said:</p>
+                <p className="text-sm text-white font-medium">"{currentTranscript}"</p>
+              </div>
+            )}
+          </div>
+
+          {/* Voice Button */}
+          <div className="flex items-center justify-center p-6 pb-12">
+            <div className="relative">
+              {/* Animated Rings */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                {[...Array(5)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute rounded-full border border-white/20 animate-ping"
+                    style={{
+                      width: `${80 + i * 20}px`,
+                      height: `${80 + i * 20}px`,
+                      animationDelay: `${i * 0.2}s`,
+                      animationDuration: '2s',
+                      opacity: 0.3 - (i * 0.05)
+                    }}
+                  ></div>
+                ))}
+              </div>
+              
+              {/* Glow Effect - Changed to Bluish Neon */}
+              <div className="absolute inset-0 rounded-full bg-gradient-to-br from-[#00d4ff] via-[#0099cc] to-[#0066ff] opacity-30 blur-xl animate-pulse"></div>
+              
+              <button
+                onMouseDown={handleTalk}
+                onMouseUp={handleStop}
+                onTouchStart={handleTalk}
+                onTouchEnd={handleStop}
+                disabled={!isReady || isProcessing || isReplying}
+                className={`relative flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 ${
+                  isListening || isRecording
+                    ? 'bg-gradient-to-br from-red-500 to-red-600 shadow-[0_10px_20px_rgba(239,68,68,0.25)]'
+                    : isProcessing
+                      ? 'bg-gradient-to-br from-gray-500 to-gray-600 shadow-[0_10px_20px_rgba(107,114,128,0.25)] cursor-not-allowed'
+                      : isReplying
+                        ? 'bg-gradient-to-br from-[#00ff88] to-[#00cc6a] shadow-[0_10px_20px_rgba(0,255,136,0.25)] cursor-not-allowed'
+                        : isReady
+                          ? 'bg-gradient-to-br from-[#00d4ff] via-[#0099cc] to-[#0066ff] shadow-[0_10px_20px_rgba(0,212,255,0.25)] hover:from-[#00b8e6] hover:via-[#0088b3] hover:to-[#0052cc] active:scale-95'
+                          : 'bg-gray-600 cursor-not-allowed'
+                }`}
+              >
+                {/* Sparkle Effect - Changed to Bluish */}
+                <div className="absolute top-2 left-2 w-2 h-2 bg-[#00d4ff] rounded-full opacity-80 animate-pulse"></div>
+                
+                {(isListening || isRecording) ? (
+                  <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                  </svg>
+                ) : isProcessing ? (
+                  <svg className="h-8 w-8 text-white animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M6.34 6.34l-2.83 2.83m8.48-8.48l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                  </svg>
+                ) : isReplying ? (
+                  <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                    <line x1="8" y1="23" x2="16" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                  </svg>
+                ) : (
+                  <svg className="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                    <line x1="8" y1="23" x2="16" y2="23" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></line>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Indicator */}
+          <div className="absolute bottom-2 left-1/2 w-32 -translate-x-1/2">
+            <div className="h-1 rounded-full bg-white/40"></div>
+          </div>
+        </div>
       </div>
-      
-      <details className="w-full">
-        <summary className="cursor-pointer font-medium">Latency log</summary>
-        <pre className="text-xs bg-gray-900 text-green-400 p-2 rounded overflow-y-auto h-48">
+
+      {/* Debug Panel */}
+      <details className="fixed bottom-4 right-4 w-80 bg-black/80 text-white p-4 rounded-lg">
+        <summary className="cursor-pointer font-medium">Debug Log</summary>
+        <pre className="text-xs mt-2 overflow-y-auto h-32">
           {log.join('\n')}
         </pre>
       </details>
+
+      {/* Custom CSS for animations */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+        @keyframes waveform {
+          0%, 100% { transform: scaleY(0.4); }
+          20% { transform: scaleY(1); }
+          40% { transform: scaleY(0.6); }
+          60% { transform: scaleY(0.8); }
+          80% { transform: scaleY(0.5); }
+        }
+        .animate-pulse {
+          animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        .waveform-bar {
+          animation: waveform 1.5s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
@@ -369,13 +516,11 @@ async function llm(prompt: string): Promise<string> {
   try {
     const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_KEY;
     
-    // Debug logging
+    // Debug logging without exposing the API key
     console.log('API Key check:', {
       hasKey: !!apiKey,
       keyLength: apiKey?.length,
-      keyStart: apiKey?.substring(0, 10) + '...',
-      isPlaceholder: apiKey === 'your_openrouter_api_key_here',
-      fullKey: apiKey // Temporarily show full key for debugging
+      isConfigured: apiKey && apiKey !== 'your_openrouter_api_key_here'
     });
     
     if (!apiKey || apiKey === 'your_openrouter_api_key_here') {
