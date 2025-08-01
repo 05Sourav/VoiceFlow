@@ -51,6 +51,10 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  
+  // PWA Installation state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   const pushLog = useCallback((msg: string) => {
     setLog((l) => [...l.slice(-19), `${new Date().toLocaleTimeString()} ${msg}`]);
@@ -69,6 +73,44 @@ export default function Home() {
     console.log('Browser support:', support);
     pushLog(`Browser support: Web Speech API: ${support.webSpeechAPI}, Speech Synthesis: ${support.speechSynthesis}, Media: ${support.getUserMedia}`);
   }, [pushLog]);
+
+  // PWA Installation logic
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallPrompt(true);
+      pushLog('PWA installation available');
+    };
+
+    const handleAppInstalled = () => {
+      setShowInstallPrompt(false);
+      setDeferredPrompt(null);
+      pushLog('PWA installed successfully');
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, [pushLog]);
+
+  const handleInstallPWA = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        console.log('PWA installation accepted');
+      } else {
+        console.log('PWA installation rejected');
+      }
+      setDeferredPrompt(null);
+      setShowInstallPrompt(false);
+    }
+  };
 
   // Initialize Web Speech API in main thread
   useEffect(() => {
@@ -306,6 +348,39 @@ export default function Home() {
               </svg>
             </div>
           </div>
+
+          {/* PWA Installation Prompt */}
+          {showInstallPrompt && (
+            <div className="mx-4 mb-4 rounded-lg bg-gradient-to-r from-[#6565cc]/20] to-[#bf7aff]/20] border border-white/20 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#6565cc] to-[#bf7aff] flex items-center justify-center">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-white font-medium">Install Voice Assistant</p>
+                    <p className="text-white/60 text-sm">Add to home screen for quick access</p>
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setShowInstallPrompt(false)}
+                    className="px-3 py-1 text-white/60 hover:text-white transition-colors"
+                  >
+                    Later
+                  </button>
+                  <button
+                    onClick={handleInstallPWA}
+                    className="px-4 py-2 bg-gradient-to-r from-[#6565cc] to-[#bf7aff] text-white rounded-lg font-medium hover:opacity-90 transition-opacity"
+                  >
+                    Install
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Main Content */}
           <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
