@@ -4,8 +4,7 @@ const urlsToCache = [
   '/',
   '/offline',
   '/manifest.json',
-  '/icon.png',
-  '/models/whisper/ggml-base.bin'
+  '/icon.png'
 ];
 
 // Install event - cache resources

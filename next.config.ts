@@ -9,11 +9,6 @@ const withPWA = withPWAInit({
   sw: '/sw.js', // Use our custom service worker
   runtimeCaching: [
     {
-      urlPattern: /^\/models\/whisper\/.*/,
-      handler: 'CacheFirst',
-      options: { cacheName: 'whisper-models' },
-    },
-    {
       urlPattern: /^\/api\/.*/,
       handler: 'NetworkFirst',
       options: { cacheName: 'api-cache' },
