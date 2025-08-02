@@ -19,16 +19,27 @@ export default function OfflinePage() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold mb-2">You're Offline</h1>
-        <p className="text-white/70 mb-6">
-          Please check your internet connection and try again.
+                            <h1 className="text-2xl font-bold mb-2">Server Unavailable</h1>
+        <p className="text-white/70 mb-4">
+          The development server is not running. This is normal for local PWAs.
         </p>
-        <button 
-          onClick={() => window.location.reload()} 
-          className="px-6 py-3 bg-gradient-to-r from-[#6565cc] to-[#bf7aff] text-white rounded-full font-medium hover:opacity-90 transition-opacity"
-        >
-          Retry
-        </button>
+        <p className="text-white/50 text-sm mb-6">
+          To use the app offline, start the server with &quot;npm start&quot; first, then install the PWA.
+        </p>
+        <div className="space-x-4">
+          <button 
+            onClick={() => window.location.reload()} 
+            className="px-6 py-3 bg-gradient-to-r from-[#6565cc] to-[#bf7aff] text-white rounded-full font-medium hover:opacity-90 transition-opacity"
+          >
+            Retry
+          </button>
+          <button 
+            onClick={() => window.location.href = '/'} 
+            className="px-6 py-3 bg-white/10 text-white rounded-full font-medium hover:bg-white/20 transition-colors"
+          >
+            Go Home
+          </button>
+        </div>
       </div>
     </div>
   );

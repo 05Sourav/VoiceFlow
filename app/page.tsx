@@ -6,10 +6,10 @@ import dynamic from 'next/dynamic';
 // Type declarations for Web Speech API
 declare global {
   interface Window {
-    webkitSpeechRecognition?: any;
-    SpeechRecognition?: any;
-    webkitAudioContext?: any;
-  }
+  webkitSpeechRecognition?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  SpeechRecognition?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  webkitAudioContext?: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+}
 }
 
 // Browser compatibility check - only run on client
@@ -24,9 +24,8 @@ const getBrowserSupport = () => {
 
 function HomeComponent() {
   const { start, stop, isRecording } = useMic();
-  const whisperWorker = useRef<Worker | null>(null);
   const audioCtx = useRef<AudioContext | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
 
   const [log, setLog] = useState<string[]>([]);
   const [isReady, setIsReady] = useState(false);
@@ -38,14 +37,17 @@ function HomeComponent() {
     audioContext: false,
   });
   const [isHydrated, setIsHydrated] = useState(false);
-  const [recordingCountdown, setRecordingCountdown] = useState(0);
+
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [lastQuestion, setLastQuestion] = useState('');
+  const [lastAnswer, setLastAnswer] = useState('');
+  const [isOnline, setIsOnline] = useState(true);
   
   // PWA Installation state
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null); // eslint-disable-line @typescript-eslint/no-explicit-any
   const [showInstallPrompt, setShowInstallPrompt] = useState(false);
 
   const pushLog = useCallback((msg: string) => {
@@ -57,7 +59,7 @@ function HomeComponent() {
     pushLog('All systems ready');
   }, [pushLog]);
 
-  // Check browser support after hydration
+  // Check browser support and online status after hydration
   useEffect(() => {
     setIsHydrated(true);
     // Only check browser support on client side
@@ -66,6 +68,42 @@ function HomeComponent() {
       setBrowserSupport(support);
       console.log('Browser support:', support);
       pushLog(`Browser support: Web Speech API: ${support.webSpeechAPI}, Speech Synthesis: ${support.speechSynthesis}, Media: ${support.getUserMedia}`);
+      
+      // Check online status
+      setIsOnline(navigator.onLine);
+      pushLog(`Online status: ${navigator.onLine ? 'Online' : 'Offline'}`);
+      
+      // Handle service worker cleanup for development
+      if (process.env.NODE_ENV === 'development') {
+        // Unregister any existing service workers in development
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+              pushLog('Service worker unregistered (development mode)');
+            }
+          });
+        }
+      }
+      
+      // Listen for online/offline events
+      const handleOnline = () => {
+        setIsOnline(true);
+        pushLog('Connection restored');
+      };
+      
+      const handleOffline = () => {
+        setIsOnline(false);
+        pushLog('Connection lost');
+      };
+      
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
     }
   }, [pushLog]);
 
@@ -73,14 +111,14 @@ function HomeComponent() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
-    const handleBeforeInstallPrompt = (e: any) => {
+    const handleBeforeInstallPrompt = (e: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
       e.preventDefault();
       setDeferredPrompt(e);
       setShowInstallPrompt(true);
       pushLog('PWA installation available');
     };
 
-    const handleAppInstalled = () => {
+    const handleAppInstalled = () => { // eslint-disable-line @typescript-eslint/no-explicit-any
       setShowInstallPrompt(false);
       setDeferredPrompt(null);
       pushLog('PWA installed successfully');
@@ -95,7 +133,7 @@ function HomeComponent() {
     };
   }, [pushLog]);
 
-  const handleInstallPWA = async () => {
+  const handleInstallPWA = async () => { // eslint-disable-line @typescript-eslint/no-explicit-any
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
@@ -108,6 +146,29 @@ function HomeComponent() {
       setShowInstallPrompt(false);
     }
   };
+
+  const clearServiceWorkerCache = async () => {
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+        
+        // Clear all caches
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+        
+        pushLog('Service worker cache cleared');
+        window.location.reload();
+      } catch (error) {
+        console.error('Error clearing service worker cache:', error);
+        pushLog('Failed to clear service worker cache');
+      }
+    }
+  };
+
+
 
   // Initialize Web Speech API in main thread
   useEffect(() => {
@@ -125,19 +186,21 @@ function HomeComponent() {
         recognitionRef.current.interimResults = false;
         recognitionRef.current.lang = 'en-US';
         
-        recognitionRef.current.onresult = async (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          console.log('Speech recognition result:', transcript);
-          setIsListening(false);
-          setCurrentTranscript(transcript);
-          setIsProcessing(true);
-          pushLog(`STT result: "${transcript}"`);
-          
-          // Process with LLM
-          const t0 = Date.now();
-          const reply = await llm(transcript);
-          console.log('LLM reply:', reply);
-          pushLog(`LLM RTT ${Date.now() - t0} ms`);
+                  recognitionRef.current.onresult = async (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
+            const transcript = event.results[0][0].transcript;
+            console.log('Speech recognition result:', transcript);
+            setIsListening(false);
+            setCurrentTranscript(transcript);
+            setLastQuestion(transcript);
+            setIsProcessing(true);
+            pushLog(`STT result: "${transcript}"`);
+            
+            // Process with LLM
+            const t0 = Date.now();
+            const reply = await llm(transcript);
+            console.log('LLM reply:', reply);
+            setLastAnswer(reply);
+            pushLog(`LLM RTT ${Date.now() - t0} ms`);
           
           // Use Web Speech API for TTS
           if (browserSupport.speechSynthesis) {
@@ -158,7 +221,7 @@ function HomeComponent() {
               setIsReplying(false); // Stop replying when TTS ends
             };
             
-            utterance.onerror = (event) => {
+            utterance.onerror = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
               console.error('TTS error:', event);
               pushLog('TTS error occurred');
               setIsProcessing(false);
@@ -175,7 +238,7 @@ function HomeComponent() {
           }
         };
         
-        recognitionRef.current.onerror = (event: any) => {
+        recognitionRef.current.onerror = (event: any) => { // eslint-disable-line @typescript-eslint/no-explicit-any
           console.error('Speech recognition error:', event.error);
           setIsListening(false);
           setIsProcessing(false);
@@ -214,17 +277,6 @@ function HomeComponent() {
       
       // Start countdown timer
       const recordingDuration = 8; // 8 seconds for better audio capture
-      setRecordingCountdown(recordingDuration);
-      
-      const countdownInterval = setInterval(() => {
-        setRecordingCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownInterval);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
       
       // Stop recording after the specified duration
       setTimeout(async () => {
@@ -464,12 +516,19 @@ function HomeComponent() {
                isReplying ? 'Speaking to you...' :
                'Tap to start speaking'}
             </p>
+            
+            {/* Offline Indicator */}
+            {!isOnline && (
+              <div className="mt-2 px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-full">
+                <p className="text-xs text-red-300">Offline Mode</p>
+              </div>
+            )}
 
             {/* Show Transcript when Processing */}
             {isProcessing && currentTranscript && (
               <div className="mt-4 p-3 bg-white/10 rounded-lg max-w-xs">
                 <p className="text-sm text-white/80">You said:</p>
-                <p className="text-sm text-white font-medium">"{currentTranscript}"</p>
+                <p className="text-sm text-white font-medium">&quot;{currentTranscript}&quot;</p>
               </div>
             )}
           </div>
@@ -555,9 +614,44 @@ function HomeComponent() {
       {/* Debug Panel */}
       <details className="fixed bottom-4 right-4 w-80 bg-black/80 text-white p-4 rounded-lg">
         <summary className="cursor-pointer font-medium">Debug Log</summary>
-        <pre className="text-xs mt-2 overflow-y-auto h-32">
-          {log.join('\n')}
-        </pre>
+        <div className="mt-2 space-y-2">
+          {/* Status */}
+          <div className="border-b border-white/20 pb-2">
+            <div className="text-xs text-purple-300 font-medium">Status:</div>
+            <div className="text-xs text-white">
+              Online: {isOnline ? '✅' : '❌'} | Ready: {isReady ? '✅' : '❌'}
+            </div>
+            <div className="text-xs text-white mt-1">
+              PWA: {window.matchMedia('(display-mode: standalone)').matches ? '✅' : '❌'}
+            </div>
+            <button
+              onClick={clearServiceWorkerCache}
+              className="mt-2 px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700 transition-colors"
+            >
+              Clear Cache & Reload
+            </button>
+          </div>
+          {/* Last Q&A */}
+          {lastQuestion && (
+            <div className="border-b border-white/20 pb-2">
+              <div className="text-xs text-blue-300 font-medium">Last Question:</div>
+                             <div className="text-xs text-white">&quot;{lastQuestion}&quot;</div>
+            </div>
+          )}
+          {lastAnswer && (
+            <div className="border-b border-white/20 pb-2">
+              <div className="text-xs text-green-300 font-medium">Last Answer:</div>
+                             <div className="text-xs text-white">&quot;{lastAnswer}&quot;</div>
+            </div>
+          )}
+          {/* System Log */}
+          <div>
+            <div className="text-xs text-yellow-300 font-medium mb-1">System Log:</div>
+            <pre className="text-xs overflow-y-auto h-24">
+              {log.join('\n')}
+            </pre>
+          </div>
+        </div>
       </details>
 
       {/* Custom CSS for animations */}
@@ -586,6 +680,12 @@ function HomeComponent() {
 
 async function llm(prompt: string): Promise<string> {
   try {
+    // Check if we're online
+    if (!navigator.onLine) {
+      console.log('Offline mode detected');
+      return "I'm sorry, but I'm currently offline. Please check your internet connection and try again.";
+    }
+    
     const apiKey = process.env.NEXT_PUBLIC_OPENROUTER_KEY;
     
     // Debug logging without exposing the API key
@@ -600,18 +700,63 @@ async function llm(prompt: string): Promise<string> {
       return "I'm sorry, but the API key is not configured. Please add your OpenRouter API key to the .env.local file.";
     }
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'deepseek/deepseek-chat-v3-0324:free',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 150,
-      }),
-    });
+    console.log('Making API request with prompt:', prompt);
+    
+    const requestBody = {
+      model: 'google/gemma-3n-e2b-it:free',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 200,
+      temperature: 0.7,
+    };
+    
+    console.log('Request body:', JSON.stringify(requestBody, null, 2));
+
+    // Add timeout and retry logic
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+
+    let res: Response | null = null;
+    let retryCount = 0;
+    const maxRetries = 2;
+
+    while (retryCount <= maxRetries) {
+      try {
+        console.log(`Attempt ${retryCount + 1} of ${maxRetries + 1}`);
+        
+        res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        break; // Success, exit retry loop
+        
+      } catch (error) {
+        retryCount++;
+        console.log(`Attempt ${retryCount} failed:`, error);
+        
+        if (retryCount > maxRetries) {
+          clearTimeout(timeoutId);
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
+
+    // Ensure res is defined after the loop
+    if (!res) {
+      throw new Error('Failed to get response after all retries');
+    }
+
+    console.log('API Response status:', res.status);
+    console.log('API Response headers:', Object.fromEntries(res.headers.entries()));
 
     if (!res.ok) {
       const errorText = await res.text();
@@ -619,14 +764,35 @@ async function llm(prompt: string): Promise<string> {
       return `API Error: ${res.status} - ${errorText}`;
     }
 
-    const json = await res.json();
+    const responseText = await res.text();
+    console.log('Raw API response:', responseText);
+    
+    const json = JSON.parse(responseText);
+    console.log('Parsed JSON response:', json);
     
     if (!json.choices || !json.choices[0] || !json.choices[0].message) {
       console.error('Unexpected API response structure:', json);
       return "I'm sorry, but I received an unexpected response from the API.";
     }
 
-         return json.choices[0].message.content;
+    const content = json.choices[0].message.content;
+    const reasoning = json.choices[0].message.reasoning;
+    console.log('Extracted content:', content);
+    console.log('Extracted reasoning:', reasoning);
+    
+    if (!content || content.trim() === '') {
+      console.error('Empty content received from API');
+      // If there's reasoning, try to extract a simple answer from it
+      if (reasoning && reasoning.trim() !== '') {
+        // Try to extract a simple answer from the reasoning
+        const simpleAnswer = reasoning.split('.')[0] + '.';
+        console.log('Using reasoning as fallback:', simpleAnswer);
+        return simpleAnswer;
+      }
+      return "I'm sorry, but I received an empty response from the API.";
+    }
+
+    return content;
    } catch (error) {
      console.error('LLM Error:', error);
      return "I'm sorry, but there was an error processing your request.";

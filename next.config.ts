@@ -5,23 +5,37 @@ const withPWA = withPWAInit({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development', // Only disable in development
-  sw: '/sw.js', // Use our custom service worker
+  disable: process.env.NODE_ENV === 'development', // Disable PWA in development
   runtimeCaching: [
     {
-      urlPattern: /^\/api\/.*/,
+      urlPattern: /^https:\/\/openrouter\.ai\/api\/.*/,
       handler: 'NetworkFirst',
-      options: { cacheName: 'api-cache' },
+      options: { 
+        cacheName: 'api-cache',
+        networkTimeoutSeconds: 10,
+      },
     },
     {
       urlPattern: /\.(?:png|jpg|jpeg|svg|gif|ico|webp)$/,
       handler: 'CacheFirst',
-      options: { cacheName: 'image-cache' },
+      options: { 
+        cacheName: 'image-cache',
+        expiration: {
+          maxEntries: 50,
+          maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+        },
+      },
     },
     {
-      urlPattern: /\.(?:js|css)$/,
-      handler: 'StaleWhileRevalidate',
-      options: { cacheName: 'static-resources' },
+      urlPattern: /\.(?:js|css|woff|woff2)$/,
+      handler: 'CacheFirst',
+      options: { 
+        cacheName: 'static-resources',
+        expiration: {
+          maxEntries: 100,
+          maxAgeSeconds: 24 * 60 * 60, // 24 hours
+        },
+      },
     },
   ],
   buildExcludes: [/middleware-manifest\.json$/],
