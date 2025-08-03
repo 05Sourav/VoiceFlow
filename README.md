@@ -32,7 +32,7 @@ A modern Progressive Web App (PWA) that provides real-time voice-based interacti
 
 1. **Clone and install dependencies:**
    ```bash
-   git clone <your-repo>
+   git clone https://github.com/05Sourav/VoiceFlow.git
    cd voice-pwa
    npm install
    ```
