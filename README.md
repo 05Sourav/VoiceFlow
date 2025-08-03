@@ -1,24 +1,24 @@
 # 🗣️ Voice Assistant PWA
 
-An offline-capable Progressive Web App (PWA) that provides real-time voice-based interaction using local Speech-to-Text (STT) and Text-to-Speech (TTS) processing.
+A modern Progressive Web App (PWA) that provides real-time voice-based interaction using the Web Speech API for Speech-to-Text (STT) and Text-to-Speech (TTS) processing, with AI-powered responses via OpenRouter API.
 
 ## ✨ Features
 
-- **Offline-First Architecture**: Works offline except for LLM API calls
-- **Local STT**: Whisper.cpp compiled to WebAssembly for browser-based speech recognition
-- **Local TTS**: Coqui TTS compiled to WebAssembly for browser-based speech synthesis
-- **PWA Support**: Installable as a native app with service worker caching
-- **Real-time Processing**: Web Workers for non-blocking audio processing
-- **Latency Logging**: Comprehensive performance monitoring and benchmarking
+- **🎤 Real-time Voice Interaction**: Web Speech API for instant speech recognition and synthesis
+- **🤖 AI-Powered Responses**: Integration with OpenRouter API using Google Gemma 3N model
+- **📱 PWA Support**: Installable as a native app with service worker caching
+- **📊 Performance Monitoring**: Real-time latency logging and system status
+- **🎨 Modern UI**: Beautiful, responsive design with smooth animations
+- **📱 Mobile Optimized**: Touch-friendly interface with haptic feedback
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: Next.js 15 + TypeScript + React 19
-- **PWA**: next-pwa + Service Worker
-- **STT**: Whisper.cpp (WASM) in Web Worker
-- **TTS**: Coqui TTS (WASM) in Web Worker
-- **LLM**: OpenRouter API (Google Gemma 3N)
-- **Styling**: Tailwind CSS 4
+- **PWA**: next-pwa + Service Worker + Web App Manifest
+- **Voice Processing**: Web Speech API (STT + TTS)
+- **AI**: OpenRouter API (Google Gemma 3N E2B)
+- **Styling**: Tailwind CSS 4 + Custom animations
+- **Audio**: MediaRecorder API for fallback recording
 
 ## 🚀 Quick Start
 
@@ -26,7 +26,7 @@ An offline-capable Progressive Web App (PWA) that provides real-time voice-based
 
 - Node.js 18+ 
 - npm or yarn
-- OpenRouter API key
+- OpenRouter API key (free tier available)
 
 ### Installation
 
@@ -42,6 +42,8 @@ An offline-capable Progressive Web App (PWA) that provides real-time voice-based
    # Create .env.local file
    echo "NEXT_PUBLIC_OPENROUTER_KEY=your_openrouter_api_key_here" > .env.local
    ```
+   
+   Get your free API key from [OpenRouter](https://openrouter.ai)
 
 3. **Run the development server:**
    ```bash
@@ -50,97 +52,176 @@ An offline-capable Progressive Web App (PWA) that provides real-time voice-based
 
 4. **Open your browser:**
    - Navigate to `http://localhost:3000`
-   - Allow microphone permissions
-   - Click "Hold to talk" to start voice interaction
+   - Allow microphone permissions when prompted
+   - Click the voice button to start interaction
 
 ## 📁 Project Structure
 
 ```
 voice-pwa/
 ├── app/                    # Next.js App Router
-│   ├── page.tsx           # Main voice interface
-│   ├── layout.tsx         # App layout
-│   └── globals.css        # Global styles
+│   ├── page.tsx           # Main voice interface (810 lines)
+│   ├── layout.tsx         # App layout with PWA metadata
+│   ├── globals.css        # Global styles and animations
+│   ├── favicon.ico        # App icon
+│   └── offline/           # Offline page
+│       └── page.tsx       # Offline fallback UI
 ├── hooks/                 # Custom React hooks
-│   └── useMic.ts         # Microphone management
-├── workers/               # Web Workers
-│   └── whisper.worker.ts  # STT processing
+│   └── useMic.ts         # Microphone management (109 lines)
+├── types/                 # TypeScript declarations
+│   └── next-pwa.d.ts     # PWA type definitions
 ├── public/                # Static assets
-│   ├── models/           # WASM models
-│   └── manifest.json     # PWA manifest
-├── types/                # TypeScript declarations
-└── next.config.ts        # Next.js + PWA config
+│   ├── sw.js             # Service worker (auto-generated)
+│   ├── manifest.json     # PWA manifest
+│   ├── icon.png          # App icons
+│   └── workbox-*.js      # Workbox libraries
+├── next.config.ts        # Next.js + PWA configuration
+└── package.json          # Dependencies and scripts
 ```
 
 ## 🔧 Configuration
 
 ### PWA Settings
-- **Service Worker**: Caches essential files for offline use
-- **Manifest**: Configures app installation and appearance
-- **Runtime Caching**: Caches WASM models and API responses
+- **Service Worker**: Automatic caching with Workbox
+- **Manifest**: Complete PWA configuration with icons and metadata
+- **Runtime Caching**: Smart caching for API calls, images, and static resources
+- **Offline Page**: Custom offline page with retry functionality
 
-### Audio Processing
-- **Sample Rate**: 16kHz for optimal Whisper performance
-- **Channels**: Mono (single channel)
-- **Format**: PCM Float32Array for WASM compatibility
+### Voice Processing
+- **Primary**: Web Speech API for real-time STT/TTS
+- **Fallback**: MediaRecorder API for audio recording
+- **Audio Quality**: 16kHz sample rate, mono channel
+- **Browser Support**: Automatic detection and graceful degradation
 
 ### API Configuration
-- **Model**: `google/gemma-3n-e2b-it:free` (OpenRouter)
-- **Max Tokens**: 150 for concise responses
-- **Temperature**: Default for consistent output
+- **Provider**: OpenRouter API
+- **Model**: `google/gemma-3n-e2b-it:free`
+- **Max Tokens**: 200 for concise responses
+- **Temperature**: 0.7 for balanced creativity
+- **Timeout**: 15 seconds with retry logic
 
-## 🚨 Current Status
+## 🎯 Key Features
 
-✅ **Fully Functional PWA Implementation**: This project now includes:
-- **Web Speech API** for real Speech-to-Text (STT) functionality
-- **Web Speech API** for real Text-to-Speech (TTS) functionality  
-- **OpenRouter API** for LLM responses
-- **Complete PWA features**:
-  - ✅ **Web App Manifest** - App installation and metadata
-  - ✅ **Service Worker** - Offline caching and background sync
-  - ✅ **Installation Prompt** - Native app installation
-  - ✅ **Offline Page** - Graceful offline handling
-  - ✅ **Runtime Caching** - Smart resource caching
+### **Voice Interaction**
+- **Real-time STT**: Instant speech-to-text conversion
+- **Natural TTS**: High-quality text-to-speech synthesis
+- **Visual Feedback**: Animated waveform and status indicators
+- **Error Handling**: Graceful fallback for unsupported browsers
 
-## 🎯 PWA Features
+### **PWA Capabilities**
+- **Installation**: Native app installation prompt
+- **App-like Experience**: Full-screen, standalone mode
+- **Service Worker**: Caches static assets and API responses
 
-### **Installation**
-- Users can install the app on their home screen
-- App appears like a native mobile application
-- No browser UI when launched from home screen
+### **Performance Features**
+- **Latency Monitoring**: Real-time performance tracking
+- **Debug Panel**: Comprehensive system status display
+- **Cache Management**: Manual cache clearing functionality
+- **Network Detection**: Online/offline status monitoring
 
-### **Offline Capability**
-- App works offline after first load
-- Caches essential resources (UI, models, icons)
-- Graceful offline page when network is unavailable
+## 🚨 Current Implementation Status
 
-### **Performance**
-- Fast loading with cached resources
-- Background sync capabilities
-- Optimized for mobile devices
+✅ **Fully Functional Voice Assistant PWA**:
 
-The app is fully functional and ready for production use!
+### **Core Features**
+- ✅ **Web Speech API Integration** - Real STT and TTS functionality
+- ✅ **OpenRouter API Integration** - AI-powered responses
+- ✅ **Complete PWA Implementation** - Installable, native app experience
+- ✅ **Modern UI/UX** - Beautiful, responsive design
+- ✅ **Performance Monitoring** - Real-time logging and metrics
+
+### **PWA Features**
+- ✅ **Web App Manifest** - Complete app metadata and icons
+- ✅ **Service Worker** - Caching and background sync
+- ✅ **Installation Prompt** - Native app installation
+- ✅ **Offline Page** - Graceful offline handling
+- ✅ **Runtime Caching** - Smart resource caching strategy
+
+### **Voice Features**
+- ✅ **Real-time STT** - Instant speech recognition
+- ✅ **Natural TTS** - High-quality speech synthesis
+- ✅ **Fallback Recording** - MediaRecorder for unsupported browsers
+- ✅ **Visual Feedback** - Animated UI states
+- ✅ **Error Handling** - Graceful degradation
+
+## ⚠️ Important Notes
+
+### **Internet Requirement**
+- **Web Speech API requires internet connection** for speech recognition
+- **OpenRouter API requires internet connection** for AI responses
+- **Voice features will not work offline** - only UI and basic PWA features are available offline
+
+### **Browser Compatibility**
+- **Chrome/Edge**: Full Web Speech API support
+- **Firefox**: Limited Web Speech API support
+- **Safari**: Limited Web Speech API support
+- **Mobile browsers**: Varies by platform
+
+## 🎮 Usage
+
+### **Basic Interaction**
+1. **Start**: Click and hold the voice button
+2. **Speak**: Talk clearly into your microphone
+3. **Listen**: Wait for AI processing and response
+4. **Repeat**: Continue the conversation naturally
+
+### **Advanced Features**
+- **Debug Panel**: Toggle debug information (bottom-right)
+- **Cache Management**: Clear cache and reload when needed
+- **Installation**: Add to home screen for app-like experience
 
 ## 🔮 Roadmap
 
-- [x] Integrate Web Speech API for STT
-- [x] Integrate Web Speech API for TTS
-- [x] Implement PWA functionality
-- [x] Add real-time voice interaction
-- [ ] Add voice activity detection
-- [ ] Implement streaming STT
-- [ ] Add multiple TTS voices
-- [ ] Optimize model loading and caching
-- [ ] Add offline conversation history
-- [ ] Implement wake word detection
+### **Completed** ✅
+- [x] Web Speech API integration
+- [x] OpenRouter API integration
+- [x] Complete PWA implementation
+- [x] Modern responsive UI
+- [x] Performance monitoring
+
+### **Planned** 🚧
+- [ ] Voice activity detection (VAD)
+- [ ] Streaming STT for real-time processing
+- [ ] Multiple TTS voices and languages
+- [ ] Wake word detection
+- [ ] Offline conversation history
+- [ ] Push notifications
+- [ ] Background sync for failed requests
+- [ ] Voice commands and shortcuts
+
+## 🛠️ Development
+
+### **Available Scripts**
+```bash
+npm run dev      # Start development server
+npm run build    # Build for production
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+### **Environment Variables**
+```bash
+NEXT_PUBLIC_OPENROUTER_KEY=your_api_key_here
+```
+
+### **PWA Development**
+- Service worker is disabled in development mode
+- Use `npm run build && npm run start` for PWA testing
+- Clear cache manually for testing updates
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### **Development Guidelines**
+- Follow TypeScript best practices
+- Maintain PWA compatibility
+- Test cross-browser compatibility
+- Ensure proper error handling
 
 ## 📄 License
 
@@ -148,7 +229,21 @@ MIT License - see LICENSE file for details
 
 ## 🙏 Acknowledgments
 
-- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp) for STT
-- [Coqui TTS](https://github.com/coqui-ai/TTS) for TTS
-- [OpenRouter](https://openrouter.ai) for LLM API
+- [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) for voice processing
+- [OpenRouter](https://openrouter.ai) for AI API access
 - [Next.js](https://nextjs.org) for the framework
+- [next-pwa](https://github.com/shadowwalker/next-pwa) for PWA support
+- [Tailwind CSS](https://tailwindcss.com) for styling
+
+## 📞 Support
+
+For issues and questions:
+- Check the debug panel for system status
+- Review browser console for error messages
+- Ensure microphone permissions are granted
+- Verify OpenRouter API key is configured
+- **Note**: Voice features require internet connection
+
+---
+
+**Built with ❤️ using modern web technologies**
