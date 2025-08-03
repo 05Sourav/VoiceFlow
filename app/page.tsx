@@ -514,7 +514,7 @@ function HomeComponent() {
                isListening || isRecording ? 'I\'m ready to help.' : 
                isProcessing ? 'Analyzing your request...' :
                isReplying ? 'Speaking to you...' :
-               'Tap to start speaking'}
+               'Tap and hold to speak'}
             </p>
             
             {/* Offline Indicator */}
